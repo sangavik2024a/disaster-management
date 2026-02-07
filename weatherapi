@@ -7,240 +7,66 @@ const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
 // Open-Meteo API
-const char* apiUrl = "https://api.open-meteo.com/v1/forecast?latitude=12.5123&longitude=79.6951&hourly=precipitation,rain,wind_speed_80m&timezone=auto";
-
-// Update every 30 seconds
-const unsigned long UPDATE_INTERVAL = 30000;
-unsigned long lastUpdate = 0;
-
-// Data structure for current hour
-struct WeatherData {
-  String time;
-  float precipitation;
-  float rain;
-  float windSpeed;
-};
-
-WeatherData currentWeather;
-int requestCount = 0;
-bool firstRun = true;
+const char* apiUrl = "https://api.open-meteo.com/v1/forecast?latitude=-20.311340068173244&longitude=118.6114023&hourly=precipitation,rain,wind_speed_80m&timezone=auto";
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   delay(1000);
   
-  Serial.println("\n\n########################################");
-  Serial.println("    ESP32 LIVE WEATHER MONITOR");
-  Serial.println("    Updates every 30 seconds");
-  Serial.println("    Location: 12.5123°N, 79.6951°E");
-  Serial.println("########################################\n");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected!");
   
-  connectWiFi();
-  
-  // Initial data fetch
-  fetchWeather();
-  lastUpdate = millis();
+  getWeather();
 }
 
 void loop() {
-  unsigned long currentTime = millis();
-  
-  // Check if 30 seconds have passed
-  if (currentTime - lastUpdate >= UPDATE_INTERVAL) {
-    fetchWeather();
-    lastUpdate = currentTime;
-    requestCount++;
-  }
-  
-  // Small delay to prevent watchdog issues
-  delay(100);
+  // Update every 5 minutes
+  delay(300000);
+  getWeather();
 }
 
-void connectWiFi() {
-  Serial.print("[WiFi] Connecting");
-  WiFi.begin(ssid, password);
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n[WiFi] Connected ✓");
-    Serial.print("[WiFi] IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("\n[WiFi] Connection failed! Retrying in 10s...");
-    delay(10000);
-    connectWiFi();
-  }
-}
-
-void fetchWeather() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[WiFi] Connection lost! Reconnecting...");
-    connectWiFi();
-    if (WiFi.status() != WL_CONNECTED) return;
-  }
+void getWeather() {
+  if (WiFi.status() != WL_CONNECTED) return;
   
   HTTPClient http;
-  
-  Serial.print("\n[API] Request #");
-  Serial.print(requestCount + 1);
-  Serial.println(" - Fetching live data...");
-  
-  unsigned long startTime = millis();
   http.begin(apiUrl);
   
-  int httpCode = http.GET();
-  unsigned long requestTime = millis() - startTime;
-  
-  if (httpCode == 200) {
+  if (http.GET() == 200) {
     String response = http.getString();
-    Serial.print("[API] Response received (");
-    Serial.print(requestTime);
-    Serial.println(" ms)");
     
-    parseWeather(response);
-    printWeather();
+    StaticJsonDocument<2048> doc;
+    deserializeJson(doc, response);
+    
+    float rain = doc["hourly"]["rain"][0];
+    float wind = doc["hourly"]["wind_speed_80m"][0];
+    float precip = doc["hourly"]["precipitation"][0];
+    
+    Serial.println("\n--- Weather Update ---");
+    Serial.print("Rain: ");
+    Serial.print(rain);
+    Serial.println(" mm");
+    
+    Serial.print("Wind: ");
+    Serial.print(wind);
+    Serial.println(" km/h");
+    
+    Serial.print("Precipitation: ");
+    Serial.print(precip);
+    Serial.println(" mm");
+    
+    // Simple status
+    Serial.print("Status: ");
+    if (rain > 5) Serial.println("Rainy 🌧️");
+    else if (wind > 25) Serial.println("Windy 💨");
+    else Serial.println("Clear ☀️");
     
   } else {
-    Serial.print("[API] Error! HTTP Code: ");
-    Serial.println(httpCode);
-    Serial.println("[API] Retrying in next cycle...");
+    Serial.println("Failed to get data");
   }
   
   http.end();
-  
-  // Show countdown to next update
-  if (!firstRun) {
-    Serial.println("\n⏱️  Next update in 30 seconds...");
-    Serial.println("----------------------------------------");
-  }
-  firstRun = false;
-}
-
-void parseWeather(String jsonData) {
-  StaticJsonDocument<4096> doc;
-  DeserializationError error = deserializeJson(doc, jsonData);
-  
-  if (error) {
-    Serial.print("[JSON] Parse error: ");
-    Serial.println(error.c_str());
-    return;
-  }
-  
-  // Get current hour data (index 0)
-  currentWeather.time = doc["hourly"]["time"][0].as<String>();
-  currentWeather.precipitation = doc["hourly"]["precipitation"][0].as<float>();
-  currentWeather.rain = doc["hourly"]["rain"][0].as<float>();
-  currentWeather.windSpeed = doc["hourly"]["wind_speed_80m"][0].as<float>();
-  
-  // Also get next few hours for trend analysis
-  float rainNextHour = doc["hourly"]["rain"][1].as<float>();
-  float windNextHour = doc["hourly"]["wind_speed_80m"][1].as<float>();
-  
-  // Store trend data
-  static float prevRain = 0;
-  static float prevWind = 0;
-  
-  // Calculate trends
-  String rainTrend = "";
-  String windTrend = "";
-  
-  if (requestCount > 0) {
-    if (currentWeather.rain > prevRain) rainTrend = " ↗️";
-    else if (currentWeather.rain < prevRain) rainTrend = " ↘️";
-    else rainTrend = " →";
-    
-    if (currentWeather.windSpeed > prevWind) windTrend = " ↗️";
-    else if (currentWeather.windSpeed < prevWind) windTrend = " ↘️";
-    else windTrend = " →";
-  }
-  
-  prevRain = currentWeather.rain;
-  prevWind = currentWeather.windSpeed;
-}
-
-void printWeather() {
-  Serial.println("\n========================================");
-  Serial.println("          LIVE WEATHER UPDATE");
-  Serial.println("========================================");
-  
-  // Extract time
-  String displayTime = currentWeather.time.substring(11, 16);
-  String date = currentWeather.time.substring(0, 10);
-  
-  Serial.print("📅 Date: ");
-  Serial.println(date);
-  Serial.print("🕒 Time: ");
-  Serial.println(displayTime);
-  
-  Serial.println("\n📊 CURRENT CONDITIONS:");
-  Serial.println("----------------------");
-  
-  // Rain with emoji based on intensity
-  Serial.print("🌧️  Rain: ");
-  Serial.print(currentWeather.rain, 1);
-  Serial.print(" mm");
-  
-  if (currentWeather.rain == 0) Serial.println(" (No rain)");
-  else if (currentWeather.rain < 2.5) Serial.println(" (Light)");
-  else if (currentWeather.rain < 7.5) Serial.println(" (Moderate)");
-  else if (currentWeather.rain < 15) Serial.println(" (Heavy)");
-  else Serial.println(" (Very Heavy)");
-  
-  // Precipitation
-  Serial.print("💧 Precipitation: ");
-  Serial.print(currentWeather.precipitation, 1);
-  Serial.println(" mm");
-  
-  // Wind with emoji based on speed
-  Serial.print("💨 Wind Speed (80m): ");
-  Serial.print(currentWeather.windSpeed, 1);
-  Serial.print(" km/h");
-  
-  if (currentWeather.windSpeed < 5) Serial.println(" (Calm)");
-  else if (currentWeather.windSpeed < 20) Serial.println(" (Light breeze)");
-  else if (currentWeather.windSpeed < 40) Serial.println(" (Moderate)");
-  else if (currentWeather.windSpeed < 60) Serial.println(" (Strong)");
-  else Serial.println(" (Very Strong)");
-  
-  Serial.println("\n⚠️  ALERTS:");
-  Serial.println("-----------");
-  
-  // Rain alerts
-  if (currentWeather.rain > 20) {
-    Serial.println("🔴 RED ALERT: Torrential rain! Take precautions!");
-  } else if (currentWeather.rain > 10) {
-    Serial.println("🟡 YELLOW ALERT: Heavy rainfall expected");
-  } else if (currentWeather.rain > 5) {
-    Serial.println("🔵 BLUE ALERT: Moderate rain ongoing");
-  } else {
-    Serial.println("✅ No rain alert");
-  }
-  
-  // Wind alerts
-  if (currentWeather.windSpeed > 60) {
-    Serial.println("🔴 RED ALERT: Storm force winds! Stay indoors!");
-  } else if (currentWeather.windSpeed > 40) {
-    Serial.println("🟡 YELLOW ALERT: Strong winds, secure loose objects");
-  } else if (currentWeather.windSpeed > 25) {
-    Serial.println("🔵 BLUE ALERT: Breezy conditions");
-  } else {
-    Serial.println("✅ No wind alert");
-  }
-  
-  // System info
-  Serial.println("\n💻 SYSTEM INFO:");
-  Serial.println("----------------");
-  Serial.print("Requests made: ");
-  Serial.println(requestCount + 1);
-  Serial.print("WiFi RSSI: ");
-  Serial.print(WiFi.RSSI());
-  Serial.println(" dBm");
-  
-  Serial.println("========================================");
 }
