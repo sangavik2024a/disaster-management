@@ -44,8 +44,8 @@ cv2.destroyAllWindows()
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* ssid = "VITC-EVENT";
-const char* password = "Eve@07&08#$";
+const char* ssid = "ssid";
+const char* password = "pwd";
 
 WebServer server(80);
 
