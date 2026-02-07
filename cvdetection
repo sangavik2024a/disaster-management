@@ -1,0 +1,41 @@
+import cv2
+import requests
+import time
+
+PHONE_STREAM = "http://PHONE_IP:8080/video"
+ESP32_URL = "http://ESP32_IP/update"
+
+cap = cv2.VideoCapture(PHONE_STREAM)
+
+hog = cv2.HOGDescriptor()
+hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+last_sent = -1
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        continue
+
+    boxes, _ = hog.detectMultiScale(frame, winStride=(8,8))
+
+    human_present = 1 if len(boxes) > 0 else 0
+
+    # send only if state changes
+    if human_present != last_sent:
+        try:
+            requests.get(ESP32_URL, params={"human": human_present}, timeout=1)
+            last_sent = human_present
+        except:
+            pass
+
+    for (x, y, w, h) in boxes:
+        cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+
+    cv2.imshow("Human Detection", frame)
+
+    if cv2.waitKey(1) == 27:
+        break
+
+cap.release()
+cv2.destroyAllWindows()
