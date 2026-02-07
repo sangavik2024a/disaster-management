@@ -15,20 +15,17 @@
 DHT dht(DHT_PIN, DHT_TYPE);
 
 // Thresholds
-#define SEVERE_FLOOD 25      // Distance < 25 cm = severe
-#define MODERATE_FLOOD 50    // Distance 26-50 cm = moderate
-#define IR_CLOSE 300         // IR reading < 300 = obstacle close
-#define LDR_DARK 300         // LDR < 300 = dark area
-#define TEMP_TH 37.0         // Temperature > 37°C = survivor possible
-#define HUM_TH 80.0          // Humidity > 80% = survivor possible
+#define SEVERE_FLOOD 25
+#define MODERATE_FLOOD 50
+#define IR_CLOSE 150
+#define LDR_DARK 400
+#define TEMP_TH 32.0
+#define HUM_TH 70.0
 
 void setup() {
   Serial.begin(9600);
-  
-  // Initialize DHT
   dht.begin();
   
-  // Pin modes
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(IR_PIN, INPUT);
@@ -37,140 +34,138 @@ void setup() {
   pinMode(YELLOW_LED, OUTPUT);
   pinMode(GREEN_LED, OUTPUT);
   
-  // Turn off all LEDs initially
   digitalWrite(RED_LED, LOW);
   digitalWrite(YELLOW_LED, LOW);
   digitalWrite(GREEN_LED, LOW);
   
-  Serial.println("=== Flood Rescue System Initialized ===");
+  Serial.println(F("\n=== FLOOD RESCUE SYSTEM ===\n"));
   delay(2000);
 }
 
 void loop() {
-  Serial.println("\n========== NEW READING ==========");
+  Serial.println(F("\n--- NEW SCAN ---"));
   
-  // 1. Read Ultrasonic Sensor (Water Level)
+  // Read Ultrasonic
   long duration = getUltrasonicDuration();
-  float distanceCM;
+  if (duration == 0) duration = 1;
+  float distanceCM = (duration * 0.034) / 2;
   
-  if (duration == 0) {
-    duration = 1; // Prevent division by zero
-  }
-  
-  distanceCM = (duration * 0.034) / 2;
-  
-  Serial.print("Water Distance: ");
-  Serial.print(distanceCM);
-  Serial.println(" cm");
-  
-  // 2. Read IR Sensor
+  // Read other sensors
   int irRaw = analogRead(IR_PIN);
-  bool irClose = (irRaw > 0 && irRaw < IR_CLOSE);
-  
-  Serial.print("IR Sensor: ");
-  Serial.print(irRaw);
-  Serial.print(" (Obstacle: ");
-  Serial.print(irClose ? "YES" : "NO");
-  Serial.println(")");
-  
-  // 3. Read LDR
   int ldrRaw = analogRead(LDR_PIN);
-  bool dark = (ldrRaw > 0 && ldrRaw < LDR_DARK);
-  
-  Serial.print("LDR: ");
-  Serial.print(ldrRaw);
-  Serial.print(" (Dark: ");
-  Serial.print(dark ? "YES" : "NO");
-  Serial.println(")");
-  
-  // 4. Read DHT11 (Temperature & Humidity)
   float tempC = dht.readTemperature();
   float humP = dht.readHumidity();
   
-  // Handle DHT sensor failures
   if (isnan(tempC)) tempC = 0.0;
   if (isnan(humP)) humP = 0.0;
   
-  Serial.print("Temperature: ");
-  Serial.print(tempC);
-  Serial.println(" °C");
-  
-  Serial.print("Humidity: ");
-  Serial.print(humP);
-  Serial.println(" %");
-  
-  // 5. Determine Flood Severity and Control LEDs
+  bool humanNear = (irRaw > 0 && irRaw < IR_CLOSE);
+  bool dark = (ldrRaw > 0 && ldrRaw < LDR_DARK);
   bool validReading = (distanceCM > 0 && distanceCM <= 400);
   
+  // Water Level Analysis
+  Serial.println(F("\n** WATER LEVEL **"));
+  
   if (!validReading) {
-    // Invalid ultrasonic reading - default to YELLOW (caution)
-    Serial.println("\n⚠️ SENSOR ERROR - Defaulting to CAUTION");
     digitalWrite(RED_LED, LOW);
     digitalWrite(YELLOW_LED, HIGH);
     digitalWrite(GREEN_LED, LOW);
-    Serial.println("LED: YELLOW (Caution)");
-    Serial.println("Vehicle: BOAT");
+    Serial.println(F("Sensor Error - Caution Mode"));
+    Serial.println(F("Vehicle: BOAT"));
   }
   else if (distanceCM < SEVERE_FLOOD) {
-    // Severe flood - RED LED
     digitalWrite(RED_LED, HIGH);
     digitalWrite(YELLOW_LED, LOW);
     digitalWrite(GREEN_LED, LOW);
-    Serial.println("\n🚨 SEVERE FLOOD DETECTED");
-    Serial.println("LED: RED");
-    Serial.println("Vehicle: HELICOPTER");
+    Serial.print(F("Water at: "));
+    Serial.print(distanceCM);
+    Serial.println(F(" cm"));
+    Serial.println(F("Level: SEVERE FLOOD"));
+    Serial.println(F("Vehicle: HELICOPTER"));
   }
   else if (distanceCM <= MODERATE_FLOOD) {
-    // Moderate flood - YELLOW LED
     digitalWrite(RED_LED, LOW);
     digitalWrite(YELLOW_LED, HIGH);
     digitalWrite(GREEN_LED, LOW);
-    Serial.println("\n⚠️ MODERATE FLOOD DETECTED");
-    Serial.println("LED: YELLOW");
-    Serial.println("Vehicle: BOAT");
+    Serial.print(F("Water at: "));
+    Serial.print(distanceCM);
+    Serial.println(F(" cm"));
+    Serial.println(F("Level: MODERATE FLOOD"));
+    Serial.println(F("Vehicle: BOAT"));
   }
   else {
-    // Low flood - GREEN LED
     digitalWrite(RED_LED, LOW);
     digitalWrite(YELLOW_LED, LOW);
     digitalWrite(GREEN_LED, HIGH);
-    Serial.println("\n✅ LOW FLOOD / SAFE");
-    Serial.println("LED: GREEN");
-    Serial.println("Vehicle: TRUCK");
+    Serial.print(F("Water at: "));
+    Serial.print(distanceCM);
+    Serial.println(F(" cm"));
+    Serial.println(F("Level: LOW FLOOD - SAFE"));
+    Serial.println(F("Vehicle: TRUCK"));
   }
   
-  // 6. Determine Mission Type (Survivor Detection)
-  bool survivor = (irClose && dark && tempC > TEMP_TH && humP > HUM_TH);
+  // Human Presence
+  Serial.println(F("\n** HUMAN DETECTION **"));
+  Serial.print(F("IR Sensor: "));
+  Serial.print(irRaw);
+  if (humanNear) {
+    Serial.println(F(" - HUMAN NEARBY"));
+  } else {
+    Serial.println(F(" - No close object"));
+  }
   
-  Serial.println("\n--- Survivor Detection ---");
+  Serial.print(F("Temperature: "));
+  Serial.print(tempC);
+  Serial.print(F(" C"));
+  if (tempC > TEMP_TH) {
+    Serial.println(F(" - Body heat!"));
+  } else {
+    Serial.println(F(" - Normal"));
+  }
+  
+  Serial.print(F("Humidity: "));
+  Serial.print(humP);
+  Serial.print(F(" %"));
+  if (humP > HUM_TH) {
+    Serial.println(F(" - Elevated!"));
+  } else {
+    Serial.println(F(" - Normal"));
+  }
+  
+  // Lighting
+  Serial.println(F("\n** LIGHTING **"));
+  Serial.print(F("LDR: "));
+  Serial.print(ldrRaw);
+  if (dark) {
+    Serial.println(F(" - DARK AREA"));
+    Serial.println(F("Lighting: NO - Flashlight needed!"));
+  } else {
+    Serial.println(F(" - BRIGHT"));
+    Serial.println(F("Lighting: YES - Good visibility"));
+  }
+  
+  // Mission Decision
+  bool survivor = (humanNear && dark && tempC > TEMP_TH && humP > HUM_TH);
+  
+  Serial.println(F("\n** MISSION **"));
   if (survivor) {
-    Serial.println("🆘 SURVIVOR DETECTED!");
-    Serial.println("Mission: RESCUE OPERATION");
-    Serial.println("Conditions: Obstacle close + Dark area + High temp/humidity");
-  }
-  else {
-    Serial.println("No survivor detected");
-    Serial.println("Mission: SEARCH & MONITOR");
+    Serial.println(F(">>> HUMAN CONFIRMED <<<"));
+    Serial.println(F("Type: RESCUE OPERATION"));
+    Serial.println(F("Action: Immediate evacuation!"));
+  } else {
+    Serial.println(F("No survivor detected"));
+    Serial.println(F("Type: SEARCH & MONITOR"));
   }
   
-  Serial.println("=================================\n");
-  
-  delay(2000); // Wait 2 seconds before next reading
+  Serial.println(F("\n--- End Scan ---\n"));
+  delay(3000);
 }
 
-// Function to get ultrasonic sensor duration
 long getUltrasonicDuration() {
-  // Clear the trigger pin
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
-  
-  // Send 10µs pulse
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-  
-  // Read the echo pin
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
-  
-  return duration;
+  return pulseIn(ECHO_PIN, HIGH, 30000);
 }
