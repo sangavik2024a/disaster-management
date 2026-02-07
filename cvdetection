@@ -2,8 +2,8 @@ import cv2
 import requests
 import time
 
-PHONE_STREAM = "http://PHONE_IP:8080/video"
-ESP32_URL = "http://ESP32_IP/update"
+PHONE_STREAM = "http://172.16.44.113:8080/video"
+ESP32_URL = "http://172.16.45.177/update"
 
 cap = cv2.VideoCapture(PHONE_STREAM)
 
