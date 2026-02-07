@@ -1,0 +1,176 @@
+#include <DHT.h>
+
+// Pin Definitions
+#define TRIG_PIN 9
+#define ECHO_PIN 10
+#define IR_PIN A0
+#define LDR_PIN A1
+#define DHT_PIN 2
+#define RED_LED 5
+#define YELLOW_LED 6
+#define GREEN_LED 7
+
+// DHT Sensor Setup
+#define DHT_TYPE DHT11
+DHT dht(DHT_PIN, DHT_TYPE);
+
+// Thresholds
+#define SEVERE_FLOOD 25      // Distance < 25 cm = severe
+#define MODERATE_FLOOD 50    // Distance 26-50 cm = moderate
+#define IR_CLOSE 300         // IR reading < 300 = obstacle close
+#define LDR_DARK 300         // LDR < 300 = dark area
+#define TEMP_TH 37.0         // Temperature > 37°C = survivor possible
+#define HUM_TH 80.0          // Humidity > 80% = survivor possible
+
+void setup() {
+  Serial.begin(9600);
+  
+  // Initialize DHT
+  dht.begin();
+  
+  // Pin modes
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(IR_PIN, INPUT);
+  pinMode(LDR_PIN, INPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+  
+  // Turn off all LEDs initially
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(GREEN_LED, LOW);
+  
+  Serial.println("=== Flood Rescue System Initialized ===");
+  delay(2000);
+}
+
+void loop() {
+  Serial.println("\n========== NEW READING ==========");
+  
+  // 1. Read Ultrasonic Sensor (Water Level)
+  long duration = getUltrasonicDuration();
+  float distanceCM;
+  
+  if (duration == 0) {
+    duration = 1; // Prevent division by zero
+  }
+  
+  distanceCM = (duration * 0.034) / 2;
+  
+  Serial.print("Water Distance: ");
+  Serial.print(distanceCM);
+  Serial.println(" cm");
+  
+  // 2. Read IR Sensor
+  int irRaw = analogRead(IR_PIN);
+  bool irClose = (irRaw > 0 && irRaw < IR_CLOSE);
+  
+  Serial.print("IR Sensor: ");
+  Serial.print(irRaw);
+  Serial.print(" (Obstacle: ");
+  Serial.print(irClose ? "YES" : "NO");
+  Serial.println(")");
+  
+  // 3. Read LDR
+  int ldrRaw = analogRead(LDR_PIN);
+  bool dark = (ldrRaw > 0 && ldrRaw < LDR_DARK);
+  
+  Serial.print("LDR: ");
+  Serial.print(ldrRaw);
+  Serial.print(" (Dark: ");
+  Serial.print(dark ? "YES" : "NO");
+  Serial.println(")");
+  
+  // 4. Read DHT11 (Temperature & Humidity)
+  float tempC = dht.readTemperature();
+  float humP = dht.readHumidity();
+  
+  // Handle DHT sensor failures
+  if (isnan(tempC)) tempC = 0.0;
+  if (isnan(humP)) humP = 0.0;
+  
+  Serial.print("Temperature: ");
+  Serial.print(tempC);
+  Serial.println(" °C");
+  
+  Serial.print("Humidity: ");
+  Serial.print(humP);
+  Serial.println(" %");
+  
+  // 5. Determine Flood Severity and Control LEDs
+  bool validReading = (distanceCM > 0 && distanceCM <= 400);
+  
+  if (!validReading) {
+    // Invalid ultrasonic reading - default to YELLOW (caution)
+    Serial.println("\n⚠️ SENSOR ERROR - Defaulting to CAUTION");
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(YELLOW_LED, HIGH);
+    digitalWrite(GREEN_LED, LOW);
+    Serial.println("LED: YELLOW (Caution)");
+    Serial.println("Vehicle: BOAT");
+  }
+  else if (distanceCM < SEVERE_FLOOD) {
+    // Severe flood - RED LED
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+    Serial.println("\n🚨 SEVERE FLOOD DETECTED");
+    Serial.println("LED: RED");
+    Serial.println("Vehicle: HELICOPTER");
+  }
+  else if (distanceCM <= MODERATE_FLOOD) {
+    // Moderate flood - YELLOW LED
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(YELLOW_LED, HIGH);
+    digitalWrite(GREEN_LED, LOW);
+    Serial.println("\n⚠️ MODERATE FLOOD DETECTED");
+    Serial.println("LED: YELLOW");
+    Serial.println("Vehicle: BOAT");
+  }
+  else {
+    // Low flood - GREEN LED
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, HIGH);
+    Serial.println("\n✅ LOW FLOOD / SAFE");
+    Serial.println("LED: GREEN");
+    Serial.println("Vehicle: TRUCK");
+  }
+  
+  // 6. Determine Mission Type (Survivor Detection)
+  bool survivor = (irClose && dark && tempC > TEMP_TH && humP > HUM_TH);
+  
+  Serial.println("\n--- Survivor Detection ---");
+  if (survivor) {
+    Serial.println("🆘 SURVIVOR DETECTED!");
+    Serial.println("Mission: RESCUE OPERATION");
+    Serial.println("Conditions: Obstacle close + Dark area + High temp/humidity");
+  }
+  else {
+    Serial.println("No survivor detected");
+    Serial.println("Mission: SEARCH & MONITOR");
+  }
+  
+  Serial.println("=================================\n");
+  
+  delay(2000); // Wait 2 seconds before next reading
+}
+
+// Function to get ultrasonic sensor duration
+long getUltrasonicDuration() {
+  // Clear the trigger pin
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  
+  // Send 10µs pulse
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  // Read the echo pin
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
+  
+  return duration;
+}
