@@ -39,3 +39,47 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+
+
+#include <WiFi.h>
+#include <WebServer.h>
+
+const char* ssid = "VITC-EVENT";
+const char* password = "Eve@07&08#$";
+
+WebServer server(80);
+
+void handleUpdate() {
+  String human = server.arg("human");
+
+  if (human == "1") {
+    Serial.println("HUMAN DETECTED");
+    digitalWrite(2, HIGH);   // LED ON
+  } else {
+    Serial.println("NO HUMAN");
+    digitalWrite(2, LOW);    // LED OFF
+  }
+
+  server.send(200, "text/plain", "OK");
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(2, OUTPUT);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nConnected!");
+  Serial.println(WiFi.localIP());
+
+  server.on("/update", handleUpdate);
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+}
