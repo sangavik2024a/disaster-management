@@ -9,13 +9,11 @@
 #define YELLOW_LED 26
 #define GREEN_LED 27
 
-// YOUR WIFI (CHANGE THESE)
+// YOUR WIFI
 const char* ssid = "VITC-EVENT";
 const char* password = "Eve@07&08#$";
 
 WebServer server(80);
-
-// DATA
 float waterDistance = 250;
 bool humanDetected = false;
 
@@ -41,8 +39,7 @@ void setup() {
     Serial.print(".");
   }
   
-  Serial.println("\n✅ WiFi OK!");
-  Serial.println("IP: " + WiFi.localIP().toString());
+  Serial.println("\n✅ WiFi: " + WiFi.localIP().toString());
   
   server.on("/", handleDashboard);
   server.on("/update", handlePhoneCV);
@@ -57,7 +54,7 @@ void loop() {
   if (millis() - lastScan > 2000) {
     readUltrasonic();
     updateLEDs();
-    Serial.printf("Water: %.1fcm | Human: %s\n", waterDistance, humanDetected?"YES":"NO");
+    Serial.printf("💧 %.1fcm | 👤 %s\n", waterDistance, humanDetected?"YES":"NO");
     lastScan = millis();
   }
 }
@@ -70,10 +67,9 @@ void readUltrasonic() {
   digitalWrite(TRIG_PIN, LOW);
   
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  
   if(duration > 0) {
     waterDistance = duration * 0.034 / 2;
-    if(waterDistance > 400) waterDistance = 250;
+    if(waterDistance > 300) waterDistance = 250;
   } else {
     waterDistance = 250;
   }
@@ -83,28 +79,36 @@ void updateLEDs() {
   digitalWrite(RED_LED, LOW);
   digitalWrite(YELLOW_LED, LOW);
   digitalWrite(GREEN_LED, LOW);
+  digitalWrite(HUMAN_LED, LOW);
   
-  if(waterDistance < 25) digitalWrite(RED_LED, HIGH);
-  else if(waterDistance < 50) digitalWrite(YELLOW_LED, HIGH);
-  else digitalWrite(GREEN_LED, HIGH);
+  if(waterDistance < 25) {
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(HUMAN_LED, HIGH);
+  } else if(waterDistance < 50) {
+    digitalWrite(YELLOW_LED, HIGH);
+    digitalWrite(HUMAN_LED, HIGH);
+  } else {
+    digitalWrite(GREEN_LED, HIGH);
+  }
   
-  digitalWrite(HUMAN_LED, humanDetected ? HIGH : LOW);
+  if(humanDetected) digitalWrite(HUMAN_LED, HIGH);
 }
 
 void handlePhoneCV() {
   humanDetected = (server.arg("human") == "1");
-  Serial.println(humanDetected ? "HUMAN DETECTED!" : "No human");
+  Serial.println(humanDetected ? "📱 HUMAN DETECTED!" : "📱 No human");
   server.send(200, "text/plain", "OK");
 }
 
 void handleData() {
-  server.send(200, "application/json", 
-    "{\"water\":" + String(waterDistance,1) + ",\"human\":" + String(humanDetected) + "}"
-  );
+  // FIXED JSON - NO CONCATENATION ERRORS
+  char json[100];
+  sprintf(json, "{\"water\":%.1f,\"human\":%d}", waterDistance, humanDetected);
+  server.send(200, "application/json", json);
 }
 
 void handleDashboard() {
-  server.send(200, "text/html", R"=====(
+  server.send(200, "text/html", R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -144,41 +148,41 @@ button{width:100%;padding:15px;font-size:18px;background:#ff4444;color:white;bor
 
 <script>
 async function update(){
-try{
-const r=await fetch('/data');
-const d=await r.json();
-const w=document.getElementById('water');
-w.innerHTML=`Water: ${d.water} cm`;
-w.className=d.water<25?'critical':d.water<50?'warning':'safe';
-
-document.getElementById('human').innerHTML=`Phone CV: ${d.human?'🧑 DETECTED':'👻 None'}`;
-
-const s=document.getElementById('status');
-s.innerHTML=d.water<25?'🚨 SEVERE':d.water<50?'⚠️ MODERATE':'✅ SAFE';
-s.className=d.water<25?'critical':d.water<50?'warning':'safe';
-
-const v=document.getElementById('vehicle');
-if(d.water<25 && d.human){
-v.innerHTML='🚁 HELICOPTER URGENT';
-v.style.background='#ff4444';
-}else if(d.water<50){
-v.innerHTML='🚤 BOAT IMMEDIATE';
-v.style.background='#ff8800';
-}else{
-v.innerHTML='🚛 TRUCK MONITOR';
-v.style.background='#44ff44';
-}
-}catch(e){}
+  try{
+    const r=await fetch('/data');
+    const d=await r.json();
+    
+    const w=document.getElementById('water');
+    w.innerHTML=`Water: ${d.water} cm`;
+    w.className=d.water<25?'critical':d.water<50?'warning':'safe';
+    
+    document.getElementById('human').innerHTML=`Phone CV: ${d.human?'🧑 DETECTED':'👻 None'}`;
+    
+    const s=document.getElementById('status');
+    s.innerHTML=d.water<25?'🚨 SEVERE':d.water<50?'⚠️ MODERATE':'✅ SAFE';
+    s.className=d.water<25?'critical':d.water<50?'warning':'safe';
+    
+    const v=document.getElementById('vehicle');
+    if(d.water<25 && d.human){
+      v.innerHTML='🚁 HELICOPTER URGENT';
+      v.style.background='#ff4444';
+    }else if(d.water<50){
+      v.innerHTML='🚤 BOAT IMMEDIATE';
+      v.style.background='#ff8800';
+    }else{
+      v.innerHTML='🚛 TRUCK MONITOR';
+      v.style.background='#44ff44';
+    }
+  }catch(e){}
 }
 
 function deploy(){
-alert('🚨 RESCUE DEPLOYED!\nChennai Emergency Response Activated');
+  alert('🚨 RESCUE DEPLOYED! Chennai Emergency Response Activated');
 }
 
 setInterval(update,1500);
 update();
 </script>
 </body>
-</html>
-)=====");
+</html>)rawliteral");
 }
