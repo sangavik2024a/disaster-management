@@ -122,7 +122,7 @@ body{font-family:Courier;background:#001122;color:#00ff88;padding:20px}
 .critical{color:#ff4444;font-size:24px}
 .warning{color:#ff8800;font-size:24px}
 .safe{color:#44ff44;font-size:24px}
-button{width:100%;padding:15px;font-size:18px;background:#ff4444;color:white;border:none;border-radius:10px;cursor:pointer}
+button{width:100%;padding:15px;font-size:18px;background:#ff4444;color:black;border:none;border-radius:10px;cursor:pointer}
 </style>
 </head>
 <body>
