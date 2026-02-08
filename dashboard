@@ -96,7 +96,7 @@ void updateLEDs() {
 
 void handlePhoneCV() {
   humanDetected = (server.arg("human") == "1");
-  Serial.println(humanDetected ? "📱 HUMAN DETECTED!" : "📱 No human");
+  Serial.println(humanDetected ? " HUMAN DETECTED!" : " No human");
   server.send(200, "text/plain", "OK");
 }
 
@@ -115,34 +115,34 @@ void handleDashboard() {
 <title>Chennai Flood Watch</title>
 <meta name="viewport" content="width=device-width">
 <style>
-body{font-family:Courier;background:#001122;color:#00ff88;padding:20px}
+body{font-family:Courier;background:#001122;color:#ffffff;padding:20px}
 .header{background:#003344;padding:20px;border-radius:10px;text-align:center}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 .panel{background:#002244;padding:20px;border-radius:10px}
 .critical{color:#ff4444;font-size:24px}
 .warning{color:#ff8800;font-size:24px}
-.safe{color:#44ff44;font-size:24px}
+.safe{color:#ffffff;font-size:24px}
 button{width:100%;padding:15px;font-size:18px;background:#ff4444;color:black;border:none;border-radius:10px;cursor:pointer}
 </style>
 </head>
 <body>
 <div class="header">
-<h1>🚨 CHENNAI FLOOD WATCH</h1>
+<h1>CHENNAI FLOOD WATCH</h1>
 <div>Real-time Rescue System</div>
 </div>
 
 <div class="grid">
 <div class="panel">
-<h2>📊 SENSORS</h2>
+<h2> SENSORS</h2>
 <div id="water">Water: -- cm</div>
 <div id="human">Phone CV: --</div>
 <div id="status">Status: --</div>
 </div>
 
 <div class="panel">
-<h2>🚁 RESCUE</h2>
+<h2> RESCUE</h2>
 <div id="vehicle" style="font-size:28px;padding:20px;margin:10px">Vehicle: --</div>
-<button onclick="deploy()">🚨 DEPLOY TEAM</button>
+<button onclick="deploy()"> DEPLOY TEAM</button>
 </div>
 </div>
 
@@ -156,28 +156,28 @@ async function update(){
     w.innerHTML=`Water: ${d.water} cm`;
     w.className=d.water<25?'critical':d.water<50?'warning':'safe';
     
-    document.getElementById('human').innerHTML=`Phone CV: ${d.human?'🧑 DETECTED':'👻 None'}`;
+    document.getElementById('human').innerHTML=`Phone CV: ${d.human?' DETECTED':' None'}`;
     
     const s=document.getElementById('status');
-    s.innerHTML=d.water<25?'🚨 SEVERE':d.water<50?'⚠️ MODERATE':'✅ SAFE';
+    s.innerHTML=d.water<25?' SEVERE':d.water<50?' MODERATE':' SAFE';
     s.className=d.water<25?'critical':d.water<50?'warning':'safe';
     
     const v=document.getElementById('vehicle');
     if(d.water<25 && d.human){
-      v.innerHTML='🚁 HELICOPTER URGENT';
+      v.innerHTML=' HELICOPTER URGENT';
       v.style.background='#ff4444';
     }else if(d.water<50){
-      v.innerHTML='🚤 BOAT IMMEDIATE';
+      v.innerHTML=' BOAT IMMEDIATE';
       v.style.background='#ff8800';
     }else{
-      v.innerHTML='🚛 TRUCK MONITOR';
-      v.style.background='#44ff44';
+      v.innerHTML=' TRUCK MONITOR';
+      v.style.background='#00b35f';
     }
   }catch(e){}
 }
 
 function deploy(){
-  alert('🚨 RESCUE DEPLOYED! Chennai Emergency Response Activated');
+  alert(' RESCUE DEPLOYED! Chennai Emergency Response Activated');
 }
 
 setInterval(update,1500);
