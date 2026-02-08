@@ -1,0 +1,184 @@
+#include <WiFi.h>
+#include <WebServer.h>
+
+// PINS
+#define TRIG_PIN 18
+#define ECHO_PIN 19
+#define HUMAN_LED 2
+#define RED_LED 25
+#define YELLOW_LED 26
+#define GREEN_LED 27
+
+// YOUR WIFI (CHANGE THESE)
+const char* ssid = "VITC-EVENT";
+const char* password = "Eve@07&08#$";
+
+WebServer server(80);
+
+// DATA
+float waterDistance = 250;
+bool humanDetected = false;
+
+void setup() {
+  Serial.begin(115200);
+  
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(HUMAN_LED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+  
+  digitalWrite(HUMAN_LED, LOW);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(GREEN_LED, LOW);
+  
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.println("\n✅ WiFi OK!");
+  Serial.println("IP: " + WiFi.localIP().toString());
+  
+  server.on("/", handleDashboard);
+  server.on("/update", handlePhoneCV);
+  server.on("/data", handleData);
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+  
+  static unsigned long lastScan = 0;
+  if (millis() - lastScan > 2000) {
+    readUltrasonic();
+    updateLEDs();
+    Serial.printf("Water: %.1fcm | Human: %s\n", waterDistance, humanDetected?"YES":"NO");
+    lastScan = millis();
+  }
+}
+
+void readUltrasonic() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  
+  if(duration > 0) {
+    waterDistance = duration * 0.034 / 2;
+    if(waterDistance > 400) waterDistance = 250;
+  } else {
+    waterDistance = 250;
+  }
+}
+
+void updateLEDs() {
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(GREEN_LED, LOW);
+  
+  if(waterDistance < 25) digitalWrite(RED_LED, HIGH);
+  else if(waterDistance < 50) digitalWrite(YELLOW_LED, HIGH);
+  else digitalWrite(GREEN_LED, HIGH);
+  
+  digitalWrite(HUMAN_LED, humanDetected ? HIGH : LOW);
+}
+
+void handlePhoneCV() {
+  humanDetected = (server.arg("human") == "1");
+  Serial.println(humanDetected ? "HUMAN DETECTED!" : "No human");
+  server.send(200, "text/plain", "OK");
+}
+
+void handleData() {
+  server.send(200, "application/json", 
+    "{\"water\":" + String(waterDistance,1) + ",\"human\":" + String(humanDetected) + "}"
+  );
+}
+
+void handleDashboard() {
+  server.send(200, "text/html", R"=====(
+<!DOCTYPE html>
+<html>
+<head>
+<title>Chennai Flood Watch</title>
+<meta name="viewport" content="width=device-width">
+<style>
+body{font-family:Courier;background:#001122;color:#00ff88;padding:20px}
+.header{background:#003344;padding:20px;border-radius:10px;text-align:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.panel{background:#002244;padding:20px;border-radius:10px}
+.critical{color:#ff4444;font-size:24px}
+.warning{color:#ff8800;font-size:24px}
+.safe{color:#44ff44;font-size:24px}
+button{width:100%;padding:15px;font-size:18px;background:#ff4444;color:white;border:none;border-radius:10px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>🚨 CHENNAI FLOOD WATCH</h1>
+<div>Real-time Rescue System</div>
+</div>
+
+<div class="grid">
+<div class="panel">
+<h2>📊 SENSORS</h2>
+<div id="water">Water: -- cm</div>
+<div id="human">Phone CV: --</div>
+<div id="status">Status: --</div>
+</div>
+
+<div class="panel">
+<h2>🚁 RESCUE</h2>
+<div id="vehicle" style="font-size:28px;padding:20px;margin:10px">Vehicle: --</div>
+<button onclick="deploy()">🚨 DEPLOY TEAM</button>
+</div>
+</div>
+
+<script>
+async function update(){
+try{
+const r=await fetch('/data');
+const d=await r.json();
+const w=document.getElementById('water');
+w.innerHTML=`Water: ${d.water} cm`;
+w.className=d.water<25?'critical':d.water<50?'warning':'safe';
+
+document.getElementById('human').innerHTML=`Phone CV: ${d.human?'🧑 DETECTED':'👻 None'}`;
+
+const s=document.getElementById('status');
+s.innerHTML=d.water<25?'🚨 SEVERE':d.water<50?'⚠️ MODERATE':'✅ SAFE';
+s.className=d.water<25?'critical':d.water<50?'warning':'safe';
+
+const v=document.getElementById('vehicle');
+if(d.water<25 && d.human){
+v.innerHTML='🚁 HELICOPTER URGENT';
+v.style.background='#ff4444';
+}else if(d.water<50){
+v.innerHTML='🚤 BOAT IMMEDIATE';
+v.style.background='#ff8800';
+}else{
+v.innerHTML='🚛 TRUCK MONITOR';
+v.style.background='#44ff44';
+}
+}catch(e){}
+}
+
+function deploy(){
+alert('🚨 RESCUE DEPLOYED!\nChennai Emergency Response Activated');
+}
+
+setInterval(update,1500);
+update();
+</script>
+</body>
+</html>
+)=====");
+}
